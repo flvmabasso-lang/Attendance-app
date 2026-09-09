@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Presença · Acme</title>
+<style>
+  :root{
+    --bg:#FFFFFF;
+    --surface:#F7F7F8;
+    --text:#1D1D1F;
+    --muted:#8A8A8E;
+    --muted-2:#C6C6C8;
+    --border:#E6E6E9;
+    --success:#248A3D;
+    --success-bg:#EAF7EE;
+    --error:#D93025;
+    --error-bg:#FCECEB;
+    --ring-size: 300px;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .app{
+    height:100%;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  /* ---------- Top switcher ---------- */
+  .switcher{
+    margin-top:5vh;
+    display:flex;
+    background:var(--surface);
+    border-radius:100px;
+    padding:4px;
+    gap:2px;
+  }
+  .switcher button{
+    appearance:none;
+    border:none;
+    background:transparent;
+    color:var(--muted);
+    font-size:14px;
+    font-weight:500;
+    padding:9px 20px;
+    border-radius:100px;
+    cursor:pointer;
+    transition: background .25s ease, color .25s ease;
+  }
+  .switcher button.active{
+    background:#FFFFFF;
+    color:var(--text);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+
+  .api-status{
+    position:fixed;
+    top:20px; right:22px;
+    display:flex; flex-direction:column; align-items:flex-end; gap:4px;
+    font-size:12px; color:var(--muted);
+  }
+  .api-status .row{ display:flex; align-items:center; gap:7px; }
+  .api-status .dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--muted-2);
+    transition: background .3s ease;
+  }
+  .api-status .dot.online{ background:var(--success); }
+  .api-status .dot.offline{ background:var(--error); }
+
+  .screen{
+    width:100%;
+    max-width:960px;
+    flex:1;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+  }
+  .screen.active{ display:flex; }
+
+  /* =========================================================
+     SCREEN 1 — CHECK-IN
+     ========================================================= */
+
+  #checkin{
+    justify-content:space-between;
+    padding: 5vh 6vw 6vh;
+  }
+
+  .clock-wrap{ text-align:center; }
+  .time{
+    font-size:clamp(34px, 5vw, 56px);
+    font-weight:600;
+    letter-spacing:-0.02em;
+    line-height:1;
+    font-variant-numeric: tabular-nums;
+  }
+  .date{
+    margin-top:8px;
+    font-size:14px;
+    font-weight:400;
+    color:var(--muted);
+    text-transform:capitalize;
+  }
+
+  .stage{ position:relative; display:flex; align-items:center; justify-content:center; flex:1; }
+
+  .ring-outer{
+    position:relative;
+    width:var(--ring-size);
+    height:var(--ring-size);
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:1.5px solid var(--muted-2);
+    transition: border-color .4s ease, box-shadow .4s ease;
+  }
+  .ring-outer.scanning{
+    border-color:var(--text);
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  .ring-outer.success{ border-color:var(--success); box-shadow:0 0 0 6px var(--success-bg); }
+  .ring-outer.error{ border-color:var(--error); box-shadow:0 0 0 6px var(--error-bg); }
+
+  @keyframes pulse{
+    0%,100%{ transform:scale(1); opacity:1; }
+    50%{ transform:scale(1.015); opacity:0.85; }
+  }
+
+  .camera-circle{
+    position:relative;
+    width:calc(var(--ring-size) - 20px);
+    height:calc(var(--ring-size) - 20px);
+    border-radius:50%;
+    overflow:hidden;
+    background:var(--surface);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  video{ width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+
+  .placeholder-icon{ position:absolute; color:var(--muted-2); }
+
+  .state-icon{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,0.72);
+    opacity:0; transform:scale(0.85);
+    transition: opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.1);
+    pointer-events:none;
+  }
+  .state-icon.show{ opacity:1; transform:scale(1); }
+
+  .status-wrap{
+    text-align:center;
+    min-height:70px;
+    padding-top:28px;
+  }
+  .status-title{ font-size:20px; font-weight:600; letter-spacing:-0.01em; }
+  .status-sub{ margin-top:5px; font-size:14px; color:var(--muted); }
+
+  .footer{ display:flex; flex-direction:column; align-items:center; gap:12px; }
+
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    font-size:14px; font-weight:500;
+    padding:11px 24px; border-radius:100px;
+    transition: opacity .2s ease, transform .15s ease;
+  }
+  .btn:active{ transform:scale(0.96); }
+  .btn-dark{ background:var(--text); color:#fff; }
+  .btn-dark:hover{ opacity:0.85; }
+  .btn-outline{ background:transparent; color:var(--text); border:1px solid var(--border); }
+  .btn-outline:hover{ background:var(--surface); }
+
+  .hint{ font-size:12px; color:var(--muted-2); text-align:center; max-width:280px; line-height:1.5; }
+
+  @keyframes shake{
+    10%,90%{ transform:translateX(-1px); }
+    20%,80%{ transform:translateX(2px); }
+    30%,50%,70%{ transform:translateX(-4px); }
+    40%,60%{ transform:translateX(4px); }
+  }
+  .shake{ animation: shake .5s; }
+
+  /* =========================================================
+     SCREEN 2 — CADASTRO
+     ========================================================= */
+
+  #enroll{
+    padding: 5vh 6vw 6vh;
+    align-items:stretch;
+  }
+
+  .enroll-grid{
+    display:grid;
+    grid-template-columns: 260px 1fr;
+    gap:56px;
+    margin-top:4vh;
+  }
+
+  .enroll-photo{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:16px;
+  }
+
+  .photo-circle{
+    width:200px; height:200px; border-radius:50%;
+    background:var(--surface);
+    border:1.5px dashed var(--muted-2);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    position:relative;
+  }
+  .photo-circle.filled{ border-style:solid; border-color:var(--border); }
+  .photo-circle video, .photo-circle img{
+    width:100%; height:100%; object-fit:cover; transform:scaleX(-1);
+  }
+  .photo-circle img{ transform:none; }
+
+  .form-col{ display:flex; flex-direction:column; gap:22px; max-width:420px; }
+
+  .field label{
+    display:block; font-size:12px; color:var(--muted); margin-bottom:6px;
+  }
+  .field input, .field select{
+    width:100%;
+    border:none;
+    border-bottom:1px solid var(--border);
+    padding:8px 2px;
+    font-size:16px;
+    color:var(--text);
+    background:transparent;
+    outline:none;
+    font-family:inherit;
+    transition: border-color .2s ease;
+  }
+  .field input:focus, .field select:focus{ border-bottom-color:var(--text); }
+
+  .form-actions{ display:flex; gap:12px; margin-top:4px; }
+
+  .section-label{
+    font-size:12px; font-weight:600; color:var(--muted);
+    text-transform:uppercase; letter-spacing:0.04em;
+    margin: 6vh 0 18px;
+  }
+
+  .employee-list{ display:flex; flex-direction:column; }
+  .employee-row{
+    display:flex; align-items:center; gap:14px;
+    padding:14px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .avatar{
+    width:44px; height:44px; border-radius:50%;
+    background:var(--surface);
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:600; color:var(--muted);
+    overflow:hidden; flex-shrink:0;
+  }
+  .avatar img{ width:100%; height:100%; object-fit:cover; }
+  .emp-info{ flex:1; }
+  .emp-name{ font-size:15px; font-weight:500; }
+  .emp-dept{ font-size:13px; color:var(--muted); margin-top:1px; }
+  .emp-remove{
+    background:none; border:none; color:var(--muted-2);
+    font-size:18px; cursor:pointer; padding:4px 8px; line-height:1;
+  }
+  .emp-remove:hover{ color:var(--error); }
+
+  .toast{
+    position:fixed;
+    bottom:32px; left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--text); color:#fff;
+    padding:12px 22px; border-radius:100px;
+    font-size:14px; font-weight:500;
+    opacity:0; pointer-events:none;
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media (max-width: 640px){
+    .enroll-grid{ grid-template-columns:1fr; }
+    .enroll-photo{ order:-1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="switcher">
+    <button class="active" data-target="checkin">Presença</button>
+    <button data-target="enroll">Cadastrar funcionário</button>
+  </div>
+
+  <div class="api-status" id="apiStatus">
+    <div class="row"><span class="dot" id="apiDot"></span><span id="apiStatusText">A ligar à API…</span></div>
+  </div>
+
+  <!-- ================= SCREEN 1: CHECK-IN ================= -->
+  <div class="screen active" id="checkin">
+
+    <div class="clock-wrap">
+      <div class="time" id="time">--:--</div>
+      <div class="date" id="date">—</div>
+    </div>
+
+    <div class="stage">
+      <div class="ring-outer" id="ring">
+        <div class="camera-circle" id="camCircle">
+          <svg class="placeholder-icon" id="placeholderIcon" width="56" height="56" viewBox="0 0 24 24" fill="none">
+            <path d="M12 12.5c2.28 0 4.13-1.85 4.13-4.13S14.28 4.25 12 4.25 7.87 6.1 7.87 8.38 9.72 12.5 12 12.5Z" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M4.5 19.5c1.2-3.4 4.1-5.25 7.5-5.25s6.3 1.85 7.5 5.25" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <video id="video" autoplay playsinline muted></video>
+
+          <div class="state-icon" id="successIcon">
+            <svg width="72" height="72" viewBox="0 0 88 88" fill="none">
+              <circle cx="44" cy="44" r="42" stroke="var(--success)" stroke-width="2.5" opacity="0.25"/>
+              <path id="checkPath" d="M24 45L38 58L64 30" stroke="var(--success)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="60" stroke-dashoffset="60"/>
+            </svg>
+          </div>
+
+          <div class="state-icon" id="errorIcon">
+            <svg width="72" height="72" viewBox="0 0 88 88" fill="none">
+              <circle cx="44" cy="44" r="42" stroke="var(--error)" stroke-width="2.5" opacity="0.25"/>
+              <path d="M32 32L56 56M56 32L32 56" stroke="var(--error)" stroke-width="4.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-wrap">
+      <div class="status-title" id="statusTitle">Aproxime-se para marcar presença</div>
+      <div class="status-sub" id="statusSub">Posicione o rosto dentro do círculo</div>
+    </div>
+
+    <div class="footer">
+      <button class="btn btn-dark" id="simulateBtn">Verificar presença</button>
+      <div class="hint" id="footerHint">Posicione o rosto no círculo e toque no botão.</div>
+      <div id="debugPreviewWrap" style="display:none; text-align:center; margin-top:10px;">
+        <div style="font-size:11px; color:var(--muted-2); margin-bottom:6px;">Última imagem analisada (modo depuração):</div>
+        <img id="debugPreview" style="width:140px; height:140px; border-radius:12px; border:1px solid var(--border); object-fit:cover;">
+        <div id="debugInfo" style="font-size:12px; color:var(--text); margin-top:10px; max-width:280px; line-height:1.5;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= SCREEN 2: CADASTRO ================= -->
+  <div class="screen" id="enroll">
+
+    <div class="enroll-grid">
+      <div class="enroll-photo">
+        <div class="photo-circle" id="photoCircle">
+          <video id="enrollVideo" autoplay playsinline muted></video>
+          <img id="capturedImg" style="display:none;">
+        </div>
+        <button class="btn btn-outline" id="captureBtn">Capturar foto</button>
+      </div>
+
+      <div class="form-col">
+        <div class="field">
+          <label for="fName">Nome completo</label>
+          <input id="fName" type="text" placeholder="Ex: Ana Cardoso" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fDept">Departamento</label>
+          <input id="fDept" type="text" placeholder="Ex: Financeiro" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fEmail">Email</label>
+          <input id="fEmail" type="email" placeholder="nome@empresa.com" autocomplete="off">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-dark" id="saveBtn">Guardar funcionário</button>
+          <button class="btn btn-outline" id="clearBtn">Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Funcionários cadastrados</div>
+    <div class="employee-list" id="employeeList"></div>
+
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ---------- Configuração da API ----------
+     Ajuste estes três valores conforme o seu ambiente:
+     - API_BASE: endereço onde a API está a correr
+     - DEVICE_ID / DEVICE_KEY: gerados por "node scripts/seed-device.js" no backend
+  */
+  const CONFIG = {
+    API_BASE: 'https://attendance-api-c540.onrender.com',
+    DEVICE_ID: 'tablet-entrada-principal',
+    DEVICE_KEY: 'COLOQUE_AQUI_A_CHAVE_GERADA_PELO_SEED_DEVICE',
+  };
+
+  async function apiFetch(path, options = {}) {
+    const res = await fetch(CONFIG.API_BASE + path, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || `Erro ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function deviceHeaders() {
+    return {
+      'x-device-id': CONFIG.DEVICE_ID,
+      'x-device-key': CONFIG.DEVICE_KEY,
+    };
+  }
+
+  /* ---------- Estado da ligação à API ---------- */
+  const apiDot = document.getElementById('apiDot');
+  const apiStatusText = document.getElementById('apiStatusText');
+  let apiOnline = false;
+
+  async function checkApiStatus() {
+    try {
+      await apiFetch('/health');
+      apiOnline = true;
+      apiDot.classList.add('online'); apiDot.classList.remove('offline');
+      apiStatusText.textContent = 'API ligada';
+    } catch (e) {
+      apiOnline = false;
+      apiDot.classList.add('offline'); apiDot.classList.remove('online');
+      apiStatusText.textContent = 'API desligada';
+    }
+  }
+  checkApiStatus();
+  setInterval(checkApiStatus, 8000);
+
+  /* ---------- Switcher ---------- */
+  const switcherBtns = document.querySelectorAll('.switcher button');
+  const screens = document.querySelectorAll('.screen');
+  switcherBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      switcherBtns.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      screens.forEach(s=>s.classList.remove('active'));
+      document.getElementById(btn.dataset.target).classList.add('active');
+      if(btn.dataset.target === 'enroll') startEnrollCamera();
+    });
+  });
+
+  /* ---------- Clock ---------- */
+  const timeEl = document.getElementById('time');
+  const dateEl = document.getElementById('date');
+  function updateClock(){
+    const now = new Date();
+    timeEl.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    dateEl.textContent = now.toLocaleDateString('pt-PT', { weekday:'long', day:'numeric', month:'long' });
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  /* ---------- Shared camera stream ---------- */
+  let sharedStream = null;
+  async function getStream(){
+    if(sharedStream) return sharedStream;
+    try{
+      sharedStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' }, audio:false });
+    }catch(e){ sharedStream = null; }
+    return sharedStream;
+  }
+
+  const video = document.getElementById('video');
+  const placeholderIcon = document.getElementById('placeholderIcon');
+  getStream().then(s=>{
+    if(s){ video.srcObject = s; placeholderIcon.style.display='none'; }
+    else { placeholderIcon.style.display='block'; video.style.display='none'; }
+  });
+
+  const enrollVideo = document.getElementById('enrollVideo');
+  function startEnrollCamera(){
+    getStream().then(s=>{ if(s) enrollVideo.srcObject = s; });
+  }
+
+  // Recorta um quadrado do CENTRO do vídeo (em vez de esticar o retângulo
+  // inteiro, o que distorcia o rosto) e devolve um canvas pronto a analisar.
+  function captureSquareCanvas(videoEl, outputSize){
+    const vw = videoEl.videoWidth;
+    const vh = videoEl.videoHeight;
+    const size = Math.min(vw, vh);
+    const sx = (vw - size) / 2;
+    const sy = (vh - size) / 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = outputSize; canvas.height = outputSize;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(outputSize, 0); ctx.scale(-1,1);
+    ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, outputSize, outputSize);
+    return canvas;
+  }
+
+  const debugPreviewWrap = document.getElementById('debugPreviewWrap');
+  const debugPreview = document.getElementById('debugPreview');
+  const debugInfo = document.getElementById('debugInfo');
+
+  /* ---------- Check-in flow ---------- */
+  const ring = document.getElementById('ring');
+  const statusTitle = document.getElementById('statusTitle');
+  const statusSub = document.getElementById('statusSub');
+  const successIcon = document.getElementById('successIcon');
+  const errorIcon = document.getElementById('errorIcon');
+  const checkPath = document.getElementById('checkPath');
+  const simulateBtn = document.getElementById('simulateBtn');
+  const camCircle = document.getElementById('camCircle');
+
+  let busy = false;
+
+  function resetIcons(){
+    successIcon.classList.remove('show');
+    errorIcon.classList.remove('show');
+    checkPath.style.transition = 'none';
+    checkPath.style.strokeDashoffset = 60;
+    ring.classList.remove('success','error','scanning');
+  }
+  function setIdle(){
+    resetIcons();
+    statusTitle.textContent = 'Aproxime-se para marcar presença';
+    statusSub.textContent = 'Posicione o rosto dentro do círculo';
+    busy = false;
+    simulateBtn.disabled = false;
+  }
+  async function runScan(){
+    if(busy) return;
+
+    if(!apiOnline){
+      showToast('API desligada — não é possível registar a presença');
+      return;
+    }
+    if(employees.length === 0){
+      showToast('Cadastre pelo menos um funcionário primeiro');
+      return;
+    }
+
+    busy = true; simulateBtn.disabled = true;
+    resetIcons();
+    ring.classList.add('scanning');
+    statusTitle.textContent = 'A verificar…';
+    statusSub.textContent = 'Não se mexa por um momento';
+
+    const snapshot = captureSquareCanvas(video, 480);
+    const photoData = snapshot.toDataURL('image/jpeg', 0.85);
+    debugPreview.src = photoData;
+    debugPreviewWrap.style.display = 'block';
+
+    ring.classList.remove('scanning');
+
+    try{
+      // A comparação acontece no servidor (AWS Rekognition) — o tablet só
+      // envia a foto, não faz nenhum cálculo de reconhecimento sozinho.
+      const result = await apiFetch('/api/checkins/verify-face', {
+        method: 'POST',
+        headers: deviceHeaders(),
+        body: JSON.stringify({ photo_base64: photoData }),
+      });
+
+      if(!result.matched){
+        ring.classList.add('error');
+        errorIcon.classList.add('show');
+        camCircle.classList.add('shake');
+        statusTitle.textContent = 'Rosto não reconhecido';
+        statusSub.textContent = result.closest_name
+          ? `Mais parecido: ${result.closest_name} (${result.closest_similarity}%, mínimo ${result.threshold}%)`
+          : (result.message || 'Tente novamente ou contacte o RH');
+        debugInfo.textContent = result.closest_name
+          ? `Última tentativa: mais parecido com "${result.closest_name}" — ${result.closest_similarity}% de semelhança (mínimo exigido: ${result.threshold}%).`
+          : 'Última tentativa: sem correspondência encontrada.';
+        setTimeout(()=>camCircle.classList.remove('shake'), 500);
+        setTimeout(setIdle, 3400);
+        busy = false; simulateBtn.disabled = false;
+        return;
+      }
+
+      ring.classList.add('success');
+      successIcon.classList.add('show');
+      requestAnimationFrame(()=>{
+        checkPath.style.transition = 'stroke-dashoffset .5s ease .1s';
+        checkPath.style.strokeDashoffset = 0;
+      });
+      statusTitle.textContent = `Bem-vindo(a), ${result.employee.name.split(' ')[0]}`;
+      statusSub.textContent = result.duplicate
+        ? 'Presença já registada há menos de um minuto'
+        : `Presença registada às ${timeEl.textContent} · ${result.employee.department || ''} (${result.similarity}% de semelhança)`;
+      debugInfo.textContent = `Última tentativa: reconhecido como "${result.employee.name}" — ${result.similarity}% de semelhança.`;
+    }catch(err){
+      ring.classList.add('error');
+      errorIcon.classList.add('show');
+      camCircle.classList.add('shake');
+      statusTitle.textContent = 'Não foi possível verificar';
+      statusSub.textContent = err.message || 'Verifique a ligação com a API';
+      setTimeout(()=>camCircle.classList.remove('shake'), 500);
+    }
+
+    setTimeout(setIdle, 2600);
+  }
+  simulateBtn.addEventListener('click', runScan);
+
+  /* ---------- Enrollment ---------- */
+  const photoCircle = document.getElementById('photoCircle');
+  const capturedImg = document.getElementById('capturedImg');
+  const captureBtn = document.getElementById('captureBtn');
+  const fName = document.getElementById('fName');
+  const fDept = document.getElementById('fDept');
+  const fEmail = document.getElementById('fEmail');
+  const saveBtn = document.getElementById('saveBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const employeeList = document.getElementById('employeeList');
+  const toast = document.getElementById('toast');
+
+  let capturedPhoto = null;
+
+  captureBtn.addEventListener('click', async ()=>{
+    if(!enrollVideo.srcObject){
+      showToast('Câmara indisponível neste dispositivo');
+      return;
+    }
+    if(!enrollVideo.videoWidth || !enrollVideo.videoHeight){
+      showToast('Câmara ainda a preparar — aguarde um segundo e tente novamente');
+      return;
+    }
+
+    // A validação de "existe um rosto nesta foto?" acontece no servidor
+    // (AWS Rekognition) no momento de guardar — aqui só capturamos a foto.
+    const canvas = captureSquareCanvas(enrollVideo, 480);
+    capturedPhoto = canvas.toDataURL('image/jpeg', 0.9);
+    capturedImg.src = capturedPhoto;
+    capturedImg.style.display = 'block';
+    enrollVideo.style.display = 'none';
+    photoCircle.classList.add('filled');
+    captureBtn.textContent = 'Repetir foto';
+  });
+
+  function resetPhotoCapture(){
+    capturedPhoto = null;
+    capturedImg.style.display = 'none';
+    enrollVideo.style.display = 'block';
+    photoCircle.classList.remove('filled');
+    captureBtn.textContent = 'Capturar foto';
+  }
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'), 2200);
+  }
+
+  // Lista carregada da API (substitui os dados fixos de antes)
+  let employees = [];
+
+  function renderEmployees(){
+    employeeList.innerHTML = '';
+
+    if (employees.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'emp-dept';
+      empty.style.padding = '14px 0';
+      empty.textContent = apiOnline
+        ? 'Ainda não há funcionários cadastrados.'
+        : 'Não foi possível carregar a lista — verifique se a API está a correr.';
+      employeeList.appendChild(empty);
+      return;
+    }
+
+    employees.forEach((emp)=>{
+      const row = document.createElement('div');
+      row.className = 'employee-row';
+      const initials = emp.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      row.innerHTML = `
+        <div class="avatar">${emp.photo_base64 ? `<img src="${emp.photo_base64}">` : initials}</div>
+        <div class="emp-info">
+          <div class="emp-name">${emp.name}</div>
+          <div class="emp-dept">${emp.department || '—'}</div>
+        </div>
+        <button class="emp-remove" data-id="${emp.id}" title="Remover">&times;</button>
+      `;
+      employeeList.appendChild(row);
+    });
+
+    employeeList.querySelectorAll('.emp-remove').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        const id = e.currentTarget.dataset.id;
+        try{
+          await apiFetch(`/api/employees/${id}`, { method:'DELETE' });
+          await loadEmployees();
+          showToast('Funcionário removido');
+        }catch(err){
+          showToast('Erro ao remover: ' + err.message);
+        }
+      });
+    });
+  }
+
+  async function loadEmployees(){
+    try{
+      employees = await apiFetch('/api/employees');
+    }catch(err){
+      employees = [];
+    }
+    renderEmployees();
+  }
+  loadEmployees();
+
+  saveBtn.addEventListener('click', async ()=>{
+    if(!fName.value.trim()){
+      showToast('Indique o nome do funcionário');
+      return;
+    }
+    if(!capturedPhoto){
+      showToast('Capture uma foto do rosto antes de guardar');
+      return;
+    }
+    saveBtn.disabled = true;
+    try{
+      // O servidor valida se há mesmo um rosto na foto (via AWS) antes de
+      // aceitar o cadastro — se não houver, a API devolve um erro claro.
+      await apiFetch('/api/employees', {
+        method:'POST',
+        body: JSON.stringify({
+          name: fName.value.trim(),
+          department: fDept.value.trim(),
+          email: fEmail.value.trim(),
+          photo_base64: capturedPhoto,
+        }),
+      });
+      showToast('Funcionário cadastrado');
+      fName.value=''; fDept.value=''; fEmail.value='';
+      resetPhotoCapture();
+      await loadEmployees();
+    }catch(err){
+      showToast('Erro ao gravar: ' + err.message);
+    }
+    saveBtn.disabled = false;
+  });
+
+  clearBtn.addEventListener('click', ()=>{
+    fName.value=''; fDept.value=''; fEmail.value='';
+    resetPhotoCapture();
+  });
+</script>
+
+</body>
+</html>
